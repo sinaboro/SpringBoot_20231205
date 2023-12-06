@@ -4,16 +4,20 @@ import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
-import org.zerock.b01.dto.BoardDTO;
-import org.zerock.b01.dto.BoardListRelpyCountDTO;
-import org.zerock.b01.dto.PageRequestDTO;
-import org.zerock.b01.dto.PageResponseDTO;
+import org.zerock.b01.dto.*;
 import org.zerock.b01.service.BoardService;
+
+import java.io.File;
+import java.nio.file.Files;
+import java.util.List;
 
 @Controller
 @Log4j2
@@ -23,12 +27,14 @@ public class BoardController {
 
     private final BoardService boardService;
 
+    @Value("${org.zerock.upload.path}")
+    private String uploadPath;
+
     @Operation(summary = "list")
     @GetMapping("/list")
     public void list(PageRequestDTO pageRequestDTO, Model model){
 
-//        PageResponseDTO<BoardDTO> responseDTO = boardService.list(pageRequestDTO);
-        PageResponseDTO<BoardListRelpyCountDTO> responseDTO = boardService.listWithReplyCount(pageRequestDTO);
+        PageResponseDTO<BoardListAllDTO> responseDTO = boardService.listWithAll(pageRequestDTO);
 
         log.info(responseDTO);
 
@@ -64,10 +70,12 @@ public class BoardController {
     }
 
     @GetMapping({"/read", "/modify"})
-//    public void read(Long bno, PageRequestDTO pageRequestDTO, Model model){
     public void read(@RequestParam("bno") Long bno, PageRequestDTO pageRequestDTO, Model model){
 
-        log.info(">>>>>>>>>>>>> read or modify");
+        log.info(">>>>> /read or /modify ");
+        log.info("bno >>> " + bno);
+        log.info("PageRequestDTO  >> " + pageRequestDTO );
+
         BoardDTO boardDTO = boardService.readOne(bno);
 
         log.info(boardDTO);
@@ -106,7 +114,7 @@ public class BoardController {
     }
 
 
-    @Operation(summary = "remove" ,method = "PostMapping")
+  /*  @Operation(summary = "remove" ,method = "PostMapping")
     @PostMapping("/remove")
     public String remove(Long bno, RedirectAttributes redirectAttributes) {
 
@@ -118,6 +126,51 @@ public class BoardController {
 
         return "redirect:/board/list";
 
+    }*/
+
+    @Operation(summary = "remove" ,method = "PostMapping")
+    @PostMapping("/remove")
+    public String remove(BoardDTO boardDTO, RedirectAttributes redirectAttributes) {
+
+        log.info("remove post.. " + boardDTO.getBno());
+        Long bno = boardDTO.getBno();
+        boardService.remove(bno);
+
+        List<String> fileNames = boardDTO.getFileNames();
+
+        if(fileNames != null && fileNames.size()>0){
+            removeFiles(fileNames);
+        }
+
+        redirectAttributes.addFlashAttribute("result", "removed");
+
+        return "redirect:/board/list";
+
+    }
+
+    public void removeFiles(List<String> files){
+
+        for (String fileName:files) {
+
+            Resource resource = new FileSystemResource(uploadPath + File.separator + fileName);
+            String resourceName = resource.getFilename();
+
+
+            try {
+                String contentType = Files.probeContentType(resource.getFile().toPath());
+                resource.getFile().delete();
+
+                //섬네일이 존재한다면
+                if (contentType.startsWith("image")) {
+                    File thumbnailFile = new File(uploadPath + File.separator + "s_" + fileName);
+                    thumbnailFile.delete();
+                }
+
+            } catch (Exception e) {
+                log.error(e.getMessage());
+            }
+
+        }//end for
     }
 
 }

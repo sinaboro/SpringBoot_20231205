@@ -4,12 +4,10 @@ import com.querydsl.core.BooleanBuilder;
 import com.querydsl.core.Tuple;
 import com.querydsl.core.types.Projections;
 import com.querydsl.jpa.JPQLQuery;
-import lombok.extern.log4j.Log4j2;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.support.QuerydslRepositorySupport;
-import org.springframework.expression.spel.ast.Projection;
 import org.zerock.b01.domain.Board;
 import org.zerock.b01.domain.QBoard;
 import org.zerock.b01.domain.QReply;
@@ -20,33 +18,44 @@ import org.zerock.b01.dto.BoardListRelpyCountDTO;
 import java.util.List;
 import java.util.stream.Collectors;
 
-@Log4j2
-public class BoardSearchImpl extends QuerydslRepositorySupport implements  BoardSearch{
+public class BoardSearchImpl extends QuerydslRepositorySupport implements BoardSearch {
 
     public BoardSearchImpl(){
         super(Board.class);
     }
+
     @Override
     public Page<Board> search1(Pageable pageable) {
 
-        System.out.println("--------------------------");
         QBoard board = QBoard.board;
 
         JPQLQuery<Board> query = from(board);
 
-        query.where(board.title.contains("1"));
+        BooleanBuilder booleanBuilder = new BooleanBuilder(); // (
 
-        this.getQuerydsl().applyPagination(pageable,query);
+        booleanBuilder.or(board.title.contains("11")); // title like ...
+
+        booleanBuilder.or(board.content.contains("11")); // content like ....
+
+        query.where(booleanBuilder);
+        query.where(board.bno.gt(0L));
+
+
+        //paging
+        this.getQuerydsl().applyPagination(pageable, query);
 
         List<Board> list = query.fetch();
 
-        Long count = query.fetchCount();
+        long count = query.fetchCount();
+
 
         return null;
+
     }
 
     @Override
     public Page<Board> searchAll(String[] types, String keyword, Pageable pageable) {
+
         QBoard board = QBoard.board;
         JPQLQuery<Board> query = from(board);
 
@@ -82,9 +91,11 @@ public class BoardSearchImpl extends QuerydslRepositorySupport implements  Board
         long count = query.fetchCount();
 
         return new PageImpl<>(list, pageable, count);
+
     }
 
     @Override
+//    public Page<BoardListReplyCountDTO> searchWithReplyCount(String[] types, String keyword, Pageable pageable) {
     public Page<BoardListRelpyCountDTO> searchWithReplyCount(String[] types, String keyword, Pageable pageable) {
 
         QBoard board = QBoard.board;
@@ -119,14 +130,13 @@ public class BoardSearchImpl extends QuerydslRepositorySupport implements  Board
         //bno > 0
         query.where(board.bno.gt(0L));
 
-
-
         JPQLQuery<BoardListRelpyCountDTO> dtoQuery = query.select(Projections.bean(BoardListRelpyCountDTO.class,
                 board.bno,
                 board.title,
                 board.writer,
                 board.regDate,
-                reply.count().as("replyCount")));
+                reply.count().as("replyCount")
+        ));
 
         this.getQuerydsl().applyPagination(pageable,dtoQuery);
 
@@ -171,13 +181,18 @@ public class BoardSearchImpl extends QuerydslRepositorySupport implements  Board
 
         getQuerydsl().applyPagination(pageable, boardJPQLQuery); //paging
 
+
+
         JPQLQuery<Tuple> tupleJPQLQuery = boardJPQLQuery.select(board, reply.countDistinct());
 
-        List<BoardListAllDTO> dtoList = tupleJPQLQuery.stream().map(tuple -> {
-            Board board1 = (Board) tuple.get(board);
-            long replyCount = tuple.get(1, Long.class);
+        List<Tuple> tupleList = tupleJPQLQuery.fetch();
 
-              BoardListAllDTO dto = BoardListAllDTO.builder()
+        List<BoardListAllDTO> dtoList = tupleList.stream().map(tuple -> {
+
+            Board board1 = (Board) tuple.get(board);
+            long replyCount = tuple.get(1,Long.class);
+
+            BoardListAllDTO dto = BoardListAllDTO.builder()
                     .bno(board1.getBno())
                     .title(board1.getTitle())
                     .writer(board1.getWriter())
@@ -197,12 +212,12 @@ public class BoardSearchImpl extends QuerydslRepositorySupport implements  Board
             dto.setBoardImages(imageDTOS);
 
             return dto;
-
         }).collect(Collectors.toList());
-
 
         long totalCount = boardJPQLQuery.fetchCount();
 
+
         return new PageImpl<>(dtoList, pageable, totalCount);
     }
+
 }
